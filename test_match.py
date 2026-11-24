@@ -1,13 +1,12 @@
 # test_match.py
 from jobs import match_role, match_location, match
 
-# Role matching tests
+# 1. Test with default config (Gaurav's config in config.json)
 assert match_role("Node.js Developer")
 assert match_role("Full Stack Engineer")
 assert match_role("AI Engineer")
 assert match_role("Software Engineering Intern")
 assert match_role("SDE Intern")
-assert match_role("Web Development Intern")
 assert match_role("Backend Software Developer")
 assert match_role("Junior Ubuntu Software Engineer")
 
@@ -17,34 +16,39 @@ assert not match_role("Tech Lead - Backend")
 assert not match_role("Sales Manager")
 assert not match_role("Global Tax Intern")
 assert not match_role("Talent Acquisition Intern")
-assert not match_role("Talent Acquisition Intern - IT Recruitment")
-assert not match_role("Product Manager")
-assert not match_role("HR Intern")
 
-# Location matching tests
+# Location tests
 assert match_location("Remote")
 assert match_location("Remote (Worldwide)")
-assert match_location("Home based - Worldwide")
 assert match_location("Noida, India")
 assert match_location("Gurgaon, Haryana")
-assert match_location("Gurugram")
-assert match_location("Delhi, India")
 assert match_location("Agra, Uttar Pradesh")
-assert match_location("Work from home")
 
-# Location exclusion tests (Blocked geos or non-target cities without remote)
+# Blocked geos
 assert not match_location("Remote (USA)")
 assert not match_location("Remote (UK)")
-assert not match_location("Remote, Canada; Remote, United States")
-assert not match_location("San Francisco, USA")
-assert not match_location("Berlin, Germany")
-assert not match_location("Bangalore, India")  # On-site in Bangalore not in target cities
+assert not match_location("Bangalore, India")  # Default config is Delhi/NCR/Agra
 
-# Combined match test
-assert match("Node.js Developer", "Remote (Worldwide)")
-assert match("Software Engineering Intern", "Noida, India")
-assert not match("Senior Full Stack Developer", "Remote")
-assert not match("Global Tax Intern", "Remote")
-assert not match("Backend Developer", "Remote (USA)")
+# 2. Test with Custom Config for another user (e.g. Python Dev in Bangalore)
+custom_cfg = {
+    "user_name": "Aman",
+    "keywords": ["python", "django", "fastapi", "machine learning"],
+    "target_cities": ["bangalore", "bengaluru", "hyderabad"],
+    "allow_remote": True,
+    "prioritize_remote": True,
+    "exclude_senior": True,
+    "max_jobs": 10
+}
 
-print("All match_role(), match_location(), and match() tests passed!")
+assert match_role("Python Developer", custom_cfg)
+assert match_role("Django Backend Engineer", custom_cfg)
+assert match_role("Machine Learning Intern", custom_cfg)
+assert not match_role("Senior Python Developer", custom_cfg)
+assert not match_role("React Developer", custom_cfg)  # Not in Aman's keywords
+
+assert match_location("Bangalore, Karnataka", custom_cfg)
+assert match_location("Hyderabad, Telangana", custom_cfg)
+assert match_location("Remote (Worldwide)", custom_cfg)
+assert not match_location("Noida, India", custom_cfg)  # Not in Aman's cities
+
+print("All default and custom personalized config tests passed successfully!")

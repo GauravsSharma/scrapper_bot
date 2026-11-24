@@ -17,24 +17,46 @@ if os.path.exists(".env"):
                     os.environ[k] = v
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; JobDigestBot/1.0)"}
-MAX_JOBS = 10
+
+DEFAULT_CONFIG = {
+    "user_name": "Developer",
+    "keywords": [
+        "node", "react", "next", "full stack", "backend", "frontend",
+        "ai engineer", "llm", "genai"
+    ],
+    "target_cities": [
+        "noida", "gurgaon", "gurugram", "delhi", "new delhi", "ncr", "agra"
+    ],
+    "allow_remote": True,
+    "prioritize_remote": True,
+    "exclude_senior": True,
+    "max_jobs": 10
+}
+
+
+def load_config():
+    config = dict(DEFAULT_CONFIG)
+    if os.path.exists("config.json"):
+        try:
+            with open("config.json") as f:
+                user_cfg = json.load(f)
+                config.update(user_cfg)
+        except Exception as e:
+            print(f"Warning: could not parse config.json ({e}), using defaults")
+    return config
+
+
+CONFIG = load_config()
+MAX_JOBS = CONFIG.get("max_jobs", 10)
 
 # Verified Greenhouse and Lever boards
 GREENHOUSE = ["canonical", "vercel", "groww", "inmobi", "slice"]
 LEVER = ["paytm", "cred"]
 
-# Role matching rules
-TECH_ROLES = [
-    r"\bnode(\.js)?\b", r"\breact(\.js)?\b", r"\bnext(\.js)?\b",
-    r"\bfull[- ]?stack\b", r"\bback[- ]?end\b", r"\bfront[- ]?end\b",
-    r"\bai engineer\b", r"\bllm\b", r"\bai developer\b", r"\bgenai\b", r"\brag\b"
-]
-
 TECH_KEYWORDS = [
     r"\bsoftware\b", r"\bdeveloper\b", r"\bengineer\b", r"\bsde\b",
     r"\bweb\b", r"\bfrontend\b", r"\bbackend\b", r"\bfullstack\b",
-    r"\bprogramming\b", r"\btechnology\b", r"\btech\b", r"\bit\b",
-    r"\bnode\b", r"\breact\b", r"\bpython\b", r"\bjavascript\b", r"\btypescript\b"
+    r"\bprogramming\b", r"\btechnology\b", r"\btech\b", r"\bit\b"
 ]
 
 JUNIOR_INTERN = [
@@ -51,7 +73,6 @@ BLOCK_TITLE = [
     r"\banalyst\b", r"\baccount executive\b", r"\bpayroll\b"
 ]
 
-# Location matching rules
 BLOCKED_GEO = [
     r"\bus only\b", r"\busa only\b", r"\bunited states\b", r"\busa\b", r"\bus\b",
     r"\bcanada\b", r"\beurope only\b", r"\buk only\b", r"\buk\b", r"\bgermany\b",
@@ -63,49 +84,79 @@ OVERRIDE_GEO = [
     r"\bindia\b", r"\bworldwide\b", r"\bglobal\b", r"\banywhere\b", r"\bapac\b"
 ]
 
-VALID_CITIES = [
-    r"\bnoida\b", r"\bgurgaon\b", r"\bgurugram\b", r"\bdelhi\b",
-    r"\bnew delhi\b", r"\bncr\b", r"\bagra\b"
-]
-
 REMOTE_REGEX = [
     r"\bremote\b", r"\bworldwide\b", r"\banywhere\b",
     r"\bwfh\b", r"\bwork from home\b", r"\bhome based\b"
 ]
 
 
-def match_role(title):
+def build_keyword_regexes(keywords):
+    regexes = []
+    for k in keywords:
+        k = k.lower().strip()
+        if not k:
+            continue
+        if k in ("node", "node.js"):
+            regexes.append(r"\bnode(\.js)?\b")
+        elif k in ("react", "react.js"):
+            regexes.append(r"\breact(\.js)?\b")
+        elif k in ("next", "next.js"):
+            regexes.append(r"\bnext(\.js)?\b")
+        elif "full" in k and "stack" in k:
+            regexes.append(r"\bfull[- ]?stack\b")
+        elif "back" in k and "end" in k:
+            regexes.append(r"\bback[- ]?end\b")
+        elif "front" in k and "end" in k:
+            regexes.append(r"\bfront[- ]?end\b")
+        else:
+            regexes.append(r"\b" + re.escape(k) + r"\b")
+    return regexes
+
+
+def is_remote(loc_str):
+    return any(re.search(r, loc_str.lower()) for r in REMOTE_REGEX)
+
+
+def match_role(title, config=None):
+    cfg = config or CONFIG
     t = title.lower()
-    if any(re.search(b, t) for b in BLOCK_TITLE):
+
+    if cfg.get("exclude_senior", True) and any(re.search(b, t) for b in BLOCK_TITLE):
         return False
-    # Direct match for core technical roles (Node, React, Full-Stack, Backend, AI/LLM)
-    if any(re.search(k, t) for k in TECH_ROLES):
+
+    kw_patterns = build_keyword_regexes(cfg.get("keywords", []))
+    if any(re.search(k, t) for k in kw_patterns):
         return True
-    # Match tech internships, fresher, junior, trainee, associate roles
+
+    # Check junior/intern technical role
     if any(re.search(j, t) for j in JUNIOR_INTERN) and any(re.search(tk, t) for tk in TECH_KEYWORDS):
         return True
+
     return False
 
 
-def match_location(loc_str):
+def match_location(loc_str, config=None):
+    cfg = config or CONFIG
     l = loc_str.lower()
-    # Check if geo is restricted to non-India regions without worldwide/apac override
+
+    # Reject geo locked outside India unless worldwide/apac/india
     has_blocked_geo = any(re.search(bg, l) for bg in BLOCKED_GEO)
     has_override = any(re.search(ok, l) for ok in OVERRIDE_GEO)
     if has_blocked_geo and not has_override:
         return False
 
-    is_city = any(re.search(c, l) for c in VALID_CITIES)
-    is_rem = any(re.search(r, l) for r in REMOTE_REGEX)
-    return is_city or is_rem
+    # Check remote
+    if cfg.get("allow_remote", True) and is_remote(loc_str):
+        return True
+
+    # Check target cities
+    target_cities = cfg.get("target_cities", [])
+    city_patterns = [r"\b" + re.escape(c.lower().strip()) + r"\b" for c in target_cities if c.strip()]
+    return any(re.search(cp, l) for cp in city_patterns)
 
 
-def match(title, location):
-    return match_role(title) and match_location(location)
-
-
-def is_remote(loc_str):
-    return any(re.search(r, loc_str.lower()) for r in REMOTE_REGEX)
+def match(title, location, config=None):
+    return match_role(title, config) and match_location(location, config)
 
 
 def get(url):
@@ -211,14 +262,17 @@ def send(text):
         print(f"\n[!] Failed to contact Telegram: {e}")
 
 
-def format_digest(new_jobs):
+def format_digest(new_jobs, config=None):
+    cfg = config or CONFIG
+    user_name = cfg.get("user_name", "Developer")
+
     if not new_jobs:
-        return "No new matching jobs today."
+        return f"No new matching jobs today for {user_name}."
 
     remote = [j for j in new_jobs if is_remote(j[2])]
     onsite = [j for j in new_jobs if not is_remote(j[2])]
 
-    lines = [f"🎯 Job Digest for Gaurav ({len(new_jobs)} new matches)\n"]
+    lines = [f"🎯 Job Digest for {user_name} ({len(new_jobs)} new matches)\n"]
 
     if remote:
         lines.append("🌐 REMOTE OPPORTUNITIES (Priority 1):")
@@ -226,7 +280,8 @@ def format_digest(new_jobs):
             lines.append(f"• {t} @ {c}\n  📍 {l}\n  🔗 {u}\n")
 
     if onsite:
-        lines.append("📍 ON-SITE / HYBRID (Delhi / Gurgaon / Noida / Agra) (Priority 2):")
+        cities_str = " / ".join(c.capitalize() for c in cfg.get("target_cities", []))
+        lines.append(f"📍 ON-SITE / HYBRID ({cities_str}) (Priority 2):")
         for t, c, l, u in onsite:
             lines.append(f"• {t} @ {c}\n  📍 {l}\n  🔗 {u}\n")
 
@@ -234,19 +289,23 @@ def format_digest(new_jobs):
 
 
 def main():
+    config = load_config()
+    max_jobs = config.get("max_jobs", 10)
     seen = set(json.load(open("seen.json"))) if os.path.exists("seen.json") else set()
 
     new, urls = [], set()
     for title, company, loc, url in fetch_all():
-        if url and url not in seen and url not in urls and match(title, loc):
+        if url and url not in seen and url not in urls and match(title, loc, config):
             new.append((title, company, loc, url))
             urls.add(url)
 
-    # Sort so Remote roles appear first (Priority 1), then On-site/Hybrid (Priority 2)
-    new.sort(key=lambda j: 0 if is_remote(j[2]) else 1)
-    new = new[:MAX_JOBS]
+    # Sort so Remote roles appear first if prioritize_remote is True
+    if config.get("prioritize_remote", True):
+        new.sort(key=lambda j: 0 if is_remote(j[2]) else 1)
 
-    text = format_digest(new)
+    new = new[:max_jobs]
+
+    text = format_digest(new, config)
     send(text)
 
     with open("seen.json", "w") as f:

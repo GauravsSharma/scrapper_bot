@@ -1,0 +1,27 @@
+{
+  "user_name": "Gaurav",
+  "keywords": [
+    "node",
+    "react",
+    "next",
+    "full stack",
+    "backend",
+    "frontend",
+    "ai engineer",
+    "llm",
+    "genai"
+  ],
+  "target_cities": [
+    "noida",
+    "gurgaon",
+    "gurugram",
+    "delhi",
+    "new delhi",
+    "ncr",
+    "agra"
+  ],
+  "allow_remote": true,
+  "prioritize_remote": true,
+  "exclude_senior": true,
+  "max_jobs": 10
+}
